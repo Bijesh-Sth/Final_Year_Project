@@ -73,3 +73,5 @@ async def predict(file: UploadFile = File(...)):
     finally:
         # Remove the temporary image file
         os.remove("temp_image.jpg")
+
+#uvicorn main:app --reload
