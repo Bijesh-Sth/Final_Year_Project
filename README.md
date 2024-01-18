@@ -44,7 +44,7 @@ This Describes the process to clone the React Native app and start it
 Start the Expo Development Server:
 
 ```bash
-expo start
+npx expo start
 ```
 To run on an Android emulator/device, press a in the Expo DevTools terminal.
 To run on an iOS simulator/device, press i in the Expo DevTools terminal.
