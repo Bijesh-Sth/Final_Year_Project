@@ -2,7 +2,7 @@ import * as Speech from 'expo-speech';
 
 const TextToSpeech = (text) => {
     
-    Speech.speak("Hello", {
+    Speech.speak(text, {
         language: 'en',
       pitch: 1,
       rate: 1

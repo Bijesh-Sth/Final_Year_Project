@@ -6,6 +6,7 @@ import { StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 
 import CameraComponent from './Components/CameraComponent';
 import ApiComponent from './Components/ApiComponent';
+import TestApi from './Components/testapi';
 const Stack = createStackNavigator();
 
 const HomeScreen = ({ navigation }) => {
@@ -16,7 +17,9 @@ const HomeScreen = ({ navigation }) => {
   const navigateToApi = () => {
     navigation.navigate('Api');
   };
-
+  const navigateToTestApi = () => {
+    navigation.navigate('TestApi');
+  };
 
   return (
     <View style={styles.container}>
@@ -26,6 +29,9 @@ const HomeScreen = ({ navigation }) => {
       </TouchableOpacity>
       <TouchableOpacity onPress={navigateToApi}>
         <Text style={styles.button}>Go to API Component</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={navigateToTestApi}>
+        <Text style={styles.button}>Go to TestApi Component</Text>
       </TouchableOpacity>
     
       <StatusBar style="auto" />
@@ -55,6 +61,7 @@ const AppStack = () => {
       <Stack.Screen name="Home" component={HomeScreen} />
       <Stack.Screen name="Camera" component={CameraComponent} />
       <Stack.Screen name="Api" component={ApiComponent} />
+      <Stack.Screen name="TestApi" component={TestApi} />
     </Stack.Navigator>
   );
 };
