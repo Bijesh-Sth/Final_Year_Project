@@ -1,5 +1,13 @@
 # SmartSight
 
+SmartSight: Object Detection Application is a project aimed at aiding individuals with 
+visual impairments by serving as a "virtual eye." Leveraging the Single Shot Detector 
+(SSD) algorithm, Android TensorFlow APIs, and TextToSpeech API, the app enables users 
+to effortlessly identify and comprehend their surroundings through real-time auditory 
+feedback. The project's objective is to develop a mobile application tailored for visually 
+impaired users, incorporating Single Shot Detector (SSD), ResNet 50, Text-to-Speech 
+(TTS), and Batch Normalization.
+
 This Describes the process to clone the React Native app and start it
 
 ## Table of Contents
