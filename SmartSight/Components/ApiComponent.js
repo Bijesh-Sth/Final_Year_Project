@@ -1,21 +1,61 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Image, Platform } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, ImageBackground } from 'react-native';
 import axios from 'axios';
 import * as ImagePicker from 'expo-image-picker';
+import { Camera } from 'expo-camera';
+import * as MediaLibrary from 'expo-media-library';
 import TextToSpeech from '../Utils/tts';
-import CameraComponent from './CameraComponent'; // Import your CameraComponent
 
 const ApiComponent = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [imageUri, setImageUri] = useState(null);
   const [uploadResponse, setUploadResponse] = useState(null);
-  const [showCamera, setShowCamera] = useState(false); // State to control camera visibility
+  const [captureInterval, setCaptureInterval] = useState(10);
+  const [timer, setTimer] = useState(captureInterval);
+  const [responseTime, setResponseTime] = useState(null);
+  const [isAutoCaptureActive, setIsAutoCaptureActive] = useState(false);
+  const [isImageUploaded, setIsImageUploaded] = useState(false);
+  const [isResponseReceived, setIsResponseReceived] = useState(false);
+  const [showYellowTick, setShowYellowTick] = useState(false);
+  const [captureNewimage, setCaptureNewimage] = useState(false);
+  const [isTakingPicture, setIsTakingPicture] = useState(false);
+  const [freezeViewfinder, setFreezeViewfinder] = useState(false);
+  const [lastFrameUri, setLastFrameUri] = useState(null); // State to store the last frame URI
+
+  const [hasPermission, setHasPermission] = useState(null);
+  const cameraRef = useRef(null);
+  const url = 'https://8e8d-27-34-65-222.ngrok-free.app';
+
+  useEffect(() => {
+    (async () => {
+      const { status } = await Camera.requestPermissionsAsync();
+      setHasPermission(status === 'granted');
+    })();
+    fetchData();
+  }, []);
+
+  useEffect(() => {
+    readData();
+  }, [uploadResponse]);
+
+  useEffect(() => {
+    let intervalId;
+    if (isAutoCaptureActive) {
+      captureNewimage = true;
+      intervalId = setInterval(() => {
+        takePicture();
+        setTimer((prevTimer) => (prevTimer > 0 ? prevTimer - 1 : captureInterval));
+      }, captureInterval * 1000);
+    }
+
+    return () => clearInterval(intervalId);
+  }, [isAutoCaptureActive, captureInterval]);
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('https://700e-27-34-65-203.ngrok-free.app');
+      const response = await axios.get(url);
       setData(response.data);
     } catch (error) {
       console.error('Error fetching data:', error.message);
@@ -23,12 +63,17 @@ const ApiComponent = () => {
       setLoading(false);
     }
   };
-  const text = "Hello, I'm a text-to-speech robot.";
+
   const readData = () => {
-    if (text) {
-      TextToSpeech(text, () => {
-        console.log('Text has been spoken.');
-      });
+    if (uploadResponse) {
+      const Speak = uploadResponse.currency.label || (uploadResponse.object.length > 0 ? uploadResponse.object[0].class_name : null);
+      if (Speak) {
+        TextToSpeech(Speak, () => {
+          // console.log('Text has been spoken.');
+        }, (error) => {
+          console.error('Error while trying to speak:', error);
+        });
+      }
     }
   };
 
@@ -40,11 +85,11 @@ const ApiComponent = () => {
         aspect: [4, 3],
         quality: 1,
       });
-  
+
       if (!result.cancelled) {
-        const selectedAsset = result.assets[0];
-        const imageUri = selectedAsset.uri;
+        const imageUri = result.uri;
         setImageUri(imageUri);
+        setShowYellowTick(true);
         uploadImage(imageUri);
       }
     } catch (error) {
@@ -52,7 +97,29 @@ const ApiComponent = () => {
     }
   };
 
-  const uploadImage = async (uri) => {
+  const takePicture = async () => {
+    if (cameraRef.current && !isTakingPicture) { // Check if not already taking a picture
+      setIsTakingPicture(true); // Set flag to indicate picture taking
+      setFreezeViewfinder(true); // Freeze the viewfinder
+
+      const startTime = new Date();
+      const photo = await cameraRef.current.takePictureAsync();
+      setImageUri(photo.uri);
+      setShowYellowTick(true);
+      savePicture(photo.uri);
+      uploadImage(photo.uri, startTime);
+    }
+  };
+
+  const savePicture = async (uri) => {
+    try {
+      await MediaLibrary.saveToLibraryAsync(uri);
+    } catch (error) {
+      console.error('Error saving picture:', error);
+    }
+  };
+
+  const uploadImage = async (uri, startTime) => {
     try {
       const response = await fetch(uri);
       const blob = await response.blob();
@@ -70,7 +137,7 @@ const ApiComponent = () => {
 
       const axiosConfig = {
         method: 'post',
-        url: 'https://700e-27-34-65-203.ngrok-free.app/predict',
+        url: 'https://8e8d-27-34-65-222.ngrok-free.app/predict',
         data: formData,
         headers: {
           'Content-Type': 'multipart/form-data',
@@ -78,74 +145,114 @@ const ApiComponent = () => {
       };
 
       const axiosResponse = await axios(axiosConfig);
-      console.log('Image upload response:', axiosResponse.data);
-
       setUploadResponse(axiosResponse.data);
+      setIsImageUploaded(true);
+      setIsResponseReceived(true);
+      const endTime = new Date();
+      const responseTime = (endTime - startTime) / 1000;
+      setResponseTime(responseTime.toFixed(2));
+      setFreezeViewfinder(false); // Unfreeze the viewfinder after response
+
+      const resetIndicators = setTimeout(() => {
+        setIsImageUploaded(false);
+        setIsResponseReceived(false);
+        setShowYellowTick(false);
+        setUploadResponse(null);
+        setResponseTime(null);
+      }, 5000);
+
+      return () => clearTimeout(resetIndicators);
     } catch (error) {
       console.error('Error uploading image:', error);
-  
-      if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        console.error('Response data:', error.response.data);
-        console.error('Response status:', error.response.status);
-        console.error('Response headers:', error.response.headers);
-      } else if (error.request) {
-        // The request was made but no response was received
-        console.error('No response received:', error.request);
-      } else {
-        // Something happened in setting up the request that triggered an Error
-        console.error('Error setting up the request:', error.message);
-      }
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  const startAutoCapture = () => {
+    setIsAutoCaptureActive(true);
+    const intervalId = setInterval(() => {
+      takePicture();
+      setTimer((prevTimer) => (prevTimer > 0 ? prevTimer - 1 : captureInterval));
+    }, captureInterval * 1000);
+
+    setTimer(captureInterval);
+  };
+
+  const stopAutoCapture = () => {
+    setIsAutoCaptureActive(false);
+    setTimer(captureInterval);
+  };
 
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-      <Text>API Component</Text>
-      <TouchableOpacity onPress={readData}>
-        <View style={{ marginTop: 20, padding: 10, backgroundColor: '#007BFF', borderRadius: 5 }}>
-          <Text style={{ color: 'white' }}>Read Data with Text-to-Speech</Text>
+      <Text>SmartSight</Text>
+      
+      <View style={{ flex: 0.8, width: '100%' }}>
+        {hasPermission === null ? (
+          <ActivityIndicator style={{ flex: 1, justifyContent: 'center' }} size="large" color="#007BFF" />
+        ) : hasPermission === false ? (
+          <Text>No access to camera</Text>
+        ) : (
+          <View style={{ flex: 1 }}>
+            <Camera style={{ flex: 1 }} type={Camera.Constants.Type.back} ref={cameraRef}>
+              {freezeViewfinder && lastFrameUri && (
+                <ImageBackground source={{ uri: lastFrameUri }} style={styles.overlay} />
+              )}
+              <View style={{ flex: 1, justifyContent: 'flex-end', alignItems: 'center' }}>
+                <TouchableOpacity onPress={takePicture}>
+                  <View style={{ marginBottom: 20, padding: 10, backgroundColor: '#dc3545', borderRadius: 5 }}>
+                    <Text style={{ color: 'white' }}>Take Picture</Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            </Camera>
+          </View>
+        )}
+      </View>
+      <View style={{ position: 'absolute', top: 10, right: 10, zIndex: 1 }}>
+        {showYellowTick && (
+          <View style={{ width: 20, height: 20, backgroundColor: 'yellow', borderRadius: 10, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: 'black' }}>✓</Text>
+          </View>
+        )}
+        {isImageUploaded && (
+          <View style={{ width: 20, height: 20, backgroundColor: 'green', borderRadius: 10, alignItems: 'center', justifyContent: 'center' }}>
+            <Text style={{ color: 'white' }}>✓</Text>
+          </View>
+        )}
+        {isResponseReceived && (
+          <View style={{ width: 20, height: 20, backgroundColor: 'blue', borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginTop: 5 }}>
+            <Text style={{ color: 'white' }}>✓</Text>
+          </View>
+        )}
+      </View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-around', width: '100%' }}>
+        <TouchableOpacity onPress={pickImage}>
+          <View style={{ marginTop: 20, padding: 10, backgroundColor: '#28a745', borderRadius: 5 }}>
+            <Text style={{ color: 'white' }}>Upload Image</Text>
+          </View>
+        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', marginTop: 20 }}>
+          <TouchableOpacity onPress={startAutoCapture}>
+            <View style={{ padding: 10, backgroundColor: '#007BFF', borderRadius: 5, marginRight: 10 }}>
+              <Text style={{ color: 'white' }}>Start Auto Capture</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={stopAutoCapture}>
+            <View style={{ padding: 10, backgroundColor: '#dc3545', borderRadius: 5 }}>
+              <Text style={{ color: 'white' }}>Stop Auto Capture</Text>
+            </View>
+          </TouchableOpacity>
         </View>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={pickImage}>
-        <View style={{ marginTop: 20, padding: 10, backgroundColor: '#28a745', borderRadius: 5 }}>
-          <Text style={{ color: 'white' }}>Upload Image</Text>
-        </View>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={() => setShowCamera(!showCamera)}>
-        <View style={{ marginTop: 20, padding: 10, backgroundColor: '#dc3545', borderRadius: 5 }}>
-          <Text style={{ color: 'white' }}>Toggle Camera</Text>
-        </View>
-      </TouchableOpacity>
-      {loading ? (
-        <ActivityIndicator style={{ marginTop: 20 }} size="large" color="#007BFF" />
-      ) : (
-        <View>
-          <Text>Data from API:</Text>
-          {data && (
-            <>
-              <Text>{JSON.stringify(data, null, 2)}</Text>
-              <Text>Class Label: {data.class_label}</Text>
-            </>
-          )}
-          {imageUri && <Image source={{ uri: imageUri }} style={{ width: 200, height: 200, marginTop: 20 }} />}
-          {uploadResponse && (
-            <>
-              <Text>Image upload response:</Text>
-              <Text>{JSON.stringify(uploadResponse, null, 2)}</Text>
-            </>
-          )}
-          {/* Render CameraComponent conditionally */}
-          {showCamera && <CameraComponent />} 
-        </View>
-      )}
+      </View>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)', // Semi-transparent black overlay
+  },
+});
 
 export default ApiComponent;
